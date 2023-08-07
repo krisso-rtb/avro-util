@@ -838,17 +838,16 @@ public class FastSpecificDeserializerGeneratorTest {
 
     // generateDeserializer should not throw an exception
     try {
-      new FastSpecificDeserializerGenerator<>(writerSchema, readerSchema, tempDir, classLoader, null).generateDeserializer();
+      new FastSpecificDeserializerGenerator<>(writerSchema, readerSchema, tempDir, classLoader, null, null).generateDeserializer();
     } catch (Exception e) {
       Assert.fail("Exception was thrown: ", e);
     }
   }
 
-  @SuppressWarnings("unchecked")
   private <T> T decodeRecordFast(Schema readerSchema, Schema writerSchema, Decoder decoder) {
     FastDeserializer<T> deserializer =
-        new FastSpecificDeserializerGenerator(writerSchema, readerSchema, tempDir, classLoader,
-            null).generateDeserializer();
+        new FastSpecificDeserializerGenerator<T>(writerSchema, readerSchema, tempDir, classLoader,
+            null, null).generateDeserializer();
 
     try {
       return deserializer.deserialize(null, decoder);

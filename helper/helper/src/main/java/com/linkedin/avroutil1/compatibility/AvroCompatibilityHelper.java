@@ -32,17 +32,18 @@ import java.util.List;
 import java.util.Set;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericDatumReader;
+import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.generic.IndexedRecord;
 import org.apache.avro.io.BinaryDecoder;
 import org.apache.avro.io.BinaryEncoder;
-import org.apache.avro.io.DatumReader;
-import org.apache.avro.io.DatumWriter;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.io.Encoder;
 import org.apache.avro.io.JsonDecoder;
 import org.apache.avro.io.JsonEncoder;
 import org.apache.avro.specific.SpecificData;
 import org.apache.avro.specific.SpecificDatumReader;
+import org.apache.avro.specific.SpecificDatumWriter;
 import org.apache.avro.specific.SpecificRecord;
 
 
@@ -352,12 +353,22 @@ public class AvroCompatibilityHelper  extends AvroCompatibilityHelperCommon{
     return ADAPTER.newAliasAwareSpecificDatumReader(writerSchema, readerClass);
   }
 
-  public static DatumWriter newSpecificDatumWriter(Schema schema, SpecificData specificData) {
+  public static GenericDatumWriter newGenericDatumWriter(Schema schema, GenericData genericData) {
+    assertAvroAvailable();
+    return ADAPTER.newGenericDatumWriter(schema, genericData);
+  }
+
+  public static GenericDatumReader newGenericDatumReader(Schema writer, Schema reader, GenericData genericData) {
+    assertAvroAvailable();
+    return ADAPTER.newGenericDatumReader(writer, reader, genericData);
+  }
+
+  public static SpecificDatumWriter newSpecificDatumWriter(Schema schema, SpecificData specificData) {
     assertAvroAvailable();
     return ADAPTER.newSpecificDatumWriter(schema, specificData);
   }
 
-  public static DatumReader newSpecificDatumReader(Schema writer, Schema reader, SpecificData specificData) {
+  public static SpecificDatumReader newSpecificDatumReader(Schema writer, Schema reader, SpecificData specificData) {
     assertAvroAvailable();
     return ADAPTER.newSpecificDatumReader(writer, reader, specificData);
   }

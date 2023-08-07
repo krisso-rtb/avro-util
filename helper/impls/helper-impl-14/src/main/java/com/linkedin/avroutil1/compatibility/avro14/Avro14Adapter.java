@@ -25,6 +25,7 @@ import com.linkedin.avroutil1.compatibility.StringPropertyUtils;
 import com.linkedin.avroutil1.compatibility.StringRepresentation;
 import com.linkedin.avroutil1.compatibility.avro14.backports.Avro14DefaultValuesCache;
 import com.linkedin.avroutil1.compatibility.avro14.backports.Avro18BufferedBinaryEncoder;
+import com.linkedin.avroutil1.compatibility.avro14.backports.GenericDatumWriterExt;
 import com.linkedin.avroutil1.compatibility.avro14.backports.SpecificDatumWriterExt;
 import com.linkedin.avroutil1.compatibility.avro14.codec.AliasAwareSpecificDatumReader;
 import com.linkedin.avroutil1.compatibility.avro14.codec.BoundedMemoryDecoder;
@@ -40,11 +41,11 @@ import org.apache.avro.Avro14SchemaAccessUtil;
 import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericDatumReader;
+import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.io.Avro14BinaryDecoderAccessUtil;
 import org.apache.avro.io.BinaryDecoder;
 import org.apache.avro.io.BinaryEncoder;
-import org.apache.avro.io.DatumReader;
-import org.apache.avro.io.DatumWriter;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.io.Encoder;
@@ -53,6 +54,7 @@ import org.apache.avro.io.JsonEncoder;
 import org.apache.avro.specific.SpecificCompiler;
 import org.apache.avro.specific.SpecificData;
 import org.apache.avro.specific.SpecificDatumReader;
+import org.apache.avro.specific.SpecificDatumWriter;
 import org.codehaus.jackson.JsonEncoding;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonGenerator;
@@ -218,12 +220,23 @@ public class Avro14Adapter implements AvroAdapter {
   }
 
   @Override
-  public DatumWriter<?> newSpecificDatumWriter(Schema writer, SpecificData specificData) {
+  public GenericDatumWriter<?> newGenericDatumWriter(Schema writer, GenericData genericData) {
+    return new GenericDatumWriterExt<>(writer, genericData);
+  }
+
+  @Override
+  public GenericDatumReader<?> newGenericDatumReader(Schema writer, Schema reader, GenericData genericData) {
+    // genericData not supported here
+    return new GenericDatumReader<>(writer, reader);
+  }
+
+  @Override
+  public SpecificDatumWriter<?> newSpecificDatumWriter(Schema writer, SpecificData specificData) {
     return new SpecificDatumWriterExt<>(writer, specificData);
   }
 
   @Override
-  public DatumReader<?> newSpecificDatumReader(Schema writer, Schema reader, SpecificData specificData) {
+  public SpecificDatumReader<?> newSpecificDatumReader(Schema writer, Schema reader, SpecificData specificData) {
     //SDRs in 1.4 do not allow for specifying an instance of SpecificData
     //TODO - get back here if we want to try backporting this to 1.4
     return new SpecificDatumReader<>(writer, reader);

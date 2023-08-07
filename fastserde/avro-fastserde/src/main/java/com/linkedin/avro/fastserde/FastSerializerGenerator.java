@@ -1,5 +1,22 @@
 package com.linkedin.avro.fastserde;
 
+import java.io.File;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.avro.Conversion;
+import org.apache.avro.Conversions;
+import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.io.Encoder;
+import org.apache.avro.specific.SpecificData;
+import org.apache.avro.util.Utf8;
+import org.apache.commons.lang3.StringUtils;
+
 import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelper;
 import com.sun.codemodel.JBlock;
 import com.sun.codemodel.JClass;
@@ -7,24 +24,16 @@ import com.sun.codemodel.JClassAlreadyExistsException;
 import com.sun.codemodel.JConditional;
 import com.sun.codemodel.JExpr;
 import com.sun.codemodel.JExpression;
+import com.sun.codemodel.JFieldRef;
 import com.sun.codemodel.JForEach;
 import com.sun.codemodel.JForLoop;
 import com.sun.codemodel.JMethod;
 import com.sun.codemodel.JMod;
 import com.sun.codemodel.JPackage;
 import com.sun.codemodel.JVar;
-import java.io.File;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import org.apache.avro.Schema;
-import org.apache.avro.io.Encoder;
-import org.apache.avro.util.Utf8;
-import org.apache.commons.lang3.StringUtils;
 
 
-public class FastSerializerGenerator<T> extends FastSerdeBase {
+public class FastSerializerGenerator<T, U extends GenericData> extends FastSerdeBase<U> {
 
   private static final String ENCODER = "encoder";
   protected final Schema schema;
@@ -36,10 +45,11 @@ public class FastSerializerGenerator<T> extends FastSerdeBase {
    */
   private final Map<Integer, JVar> enumSchemaVarMap = new HashMap<>();
 
+  private JMethod constructor;
 
   public FastSerializerGenerator(boolean useGenericTypes, Schema schema, File destination, ClassLoader classLoader,
-      String compileClassPath) {
-    super("serialization", useGenericTypes, CharSequence.class, destination, classLoader, compileClassPath, true);
+      String compileClassPath, U modelData) {
+    super("serialization", useGenericTypes, CharSequence.class, destination, classLoader, compileClassPath, modelData,true);
     this.schema = schema;
   }
 
@@ -55,6 +65,9 @@ public class FastSerializerGenerator<T> extends FastSerdeBase {
 
     try {
       generatedClass = classPackage._class(className);
+      generatedClass.javadoc().add("Generated at " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+      this.constructor = generatedClass.constructor(JMod.PUBLIC);
+      injectConversionClasses(this.constructor);
 
       final JMethod serializeMethod = generatedClass.method(JMod.PUBLIC, void.class, "serialize");
       final JVar serializeMethodParam;
@@ -80,8 +93,15 @@ public class FastSerializerGenerator<T> extends FastSerdeBase {
       serializeMethod.param(codeModel.ref(Encoder.class), ENCODER);
       serializeMethod._throws(codeModel.ref(IOException.class));
 
+      this.codeModel.build(new File("/Users/kris/dev/temp/avro-fast-serde-codegen"));
+
       final Class<FastSerializer<T>> clazz = compileClass(className, schemaAssistant.getUsedFullyQualifiedClassNameSet());
-      return clazz.newInstance();
+
+      if (Utils.isLogicalTypeSupported()) {
+        return clazz.getConstructor(useGenericTypes ? GenericData.class : SpecificData.class).newInstance(modelData);
+      } else {
+        return clazz.getConstructor().newInstance();
+      }
     } catch (JClassAlreadyExistsException e) {
       throw new FastSerdeGeneratorException("Class: " + className + " already exists");
     } catch (Exception e) {
@@ -128,26 +148,55 @@ public class FastSerializerGenerator<T> extends FastSerdeBase {
 
   private void processRecord(final Schema recordSchema, JExpression recordExpr, final JBlock containerBody) {
     if (methodAlreadyDefined(recordSchema)) {
-      containerBody.invoke(getMethod(recordSchema)).arg(recordExpr).arg(JExpr.direct(ENCODER));
+      containerBody.invoke(getMethod(recordSchema))
+              .arg(recordExpr)
+              .arg(JExpr.direct(ENCODER));
       return;
     }
     JMethod method = createMethod(recordSchema);
-    containerBody.invoke(getMethod(recordSchema)).arg(recordExpr).arg(JExpr.direct(ENCODER));
+    containerBody.invoke(getMethod(recordSchema))
+            .arg(recordExpr)
+            .arg(JExpr.direct(ENCODER));
 
     JBlock body = method.body();
     recordExpr = method.listParams()[0];
 
     for (Schema.Field field : recordSchema.getFields()) {
       Schema fieldSchema = field.schema();
+
+      JVar fieldValue = body.decl(codeModel.ref(Object.class), getUniqueName("fieldValue"),
+              recordExpr.invoke("get").arg(JExpr.lit(field.pos())));
+
       if (SchemaAssistant.isComplexType(fieldSchema)) {
         JClass fieldClass = schemaAssistant.classFromSchema(fieldSchema);
         JVar containerVar = declareValueVar(field.name(), fieldSchema, body);
-        JExpression valueExpression = JExpr.invoke(recordExpr, "get").arg(JExpr.lit(field.pos()));
-        containerVar.init(JExpr.cast(fieldClass, valueExpression));
+
+        if (logicalTypeEnabled(fieldSchema)) { // TODO unions
+          // TODO konwersja zamiast rzutowania, dodać unie do kilku typów
+          // Object decimalOrUuidUnion0 = ((Object) fieldValue3);
+
+
+        }
+
+        containerVar.init(JExpr.cast(fieldClass, fieldValue));
 
         processComplexType(fieldSchema, containerVar, body);
       } else {
-        processSimpleType(fieldSchema, recordExpr.invoke("get").arg(JExpr.lit(field.pos())), body);
+        if (logicalTypeEnabled(fieldSchema)) { // TODO unions ?
+          JFieldRef schemaFieldRef = injectLogicalTypeSchema(fieldSchema);
+
+          body.assign(fieldValue, codeModel.ref(Conversions.class)
+                  .staticInvoke("convertToRawType")
+                  .arg(fieldValue)
+                  .arg(schemaFieldRef)
+                  .arg(schemaFieldRef.invoke("getLogicalType"))
+                  .arg(getConversionRef(fieldSchema.getLogicalType())));
+
+          // TODO remove
+          // Conversions.convertToRawType(fieldValue, fieldSchema, fieldSchema.getLogicalType(), conversion);
+        }
+
+        processSimpleType(fieldSchema, fieldValue, body);
       }
     }
   }
@@ -266,17 +315,17 @@ public class FastSerializerGenerator<T> extends FastSerdeBase {
     throw new RuntimeException("Unknown schema: " + schema + " in union schema: " + unionSchema);
   }
 
-  private void processUnion(final Schema unionSchema, JExpression unionExpr, JBlock body) {
+  private void processUnion(final Schema unionSchema, final JExpression unionExpr, final JBlock body) {
     JConditional ifBlock = null;
 
     for (Schema schemaOption : unionSchema.getTypes()) {
       if (Schema.Type.NULL.equals(schemaOption.getType())) {
-        /**
+        /*
          * We always handle the null branch of the union first, otherwise, it leads to a bug in the
          * case where there is an optional field where the null is the second branch of the union.
          */
         JExpression condition = unionExpr.eq(JExpr._null());
-        ifBlock = ifBlock != null ? ifBlock._elseif(condition) : body._if(condition);
+        ifBlock = body._if(condition);
         JBlock thenBlock = ifBlock._then();
         thenBlock.invoke(JExpr.direct(ENCODER), "writeIndex")
             .arg(JExpr.lit(getIndexNamedForUnion(unionSchema, schemaOption)));
@@ -287,7 +336,7 @@ public class FastSerializerGenerator<T> extends FastSerdeBase {
 
     for (Schema schemaOption : unionSchema.getTypes()) {
       if (Schema.Type.NULL.equals(schemaOption.getType())) {
-        /**
+        /*
          * Since we've already added code to process the null branch, we can skip it when processing
          * the other types.
          */
@@ -296,11 +345,15 @@ public class FastSerializerGenerator<T> extends FastSerdeBase {
 
       JClass optionClass = schemaAssistant.classFromSchema(schemaOption);
       JClass rawOptionClass = schemaAssistant.classFromSchema(schemaOption, true, true);
+      JClass optionLogicalTypeClass = logicalTypeEnabled(schemaOption)
+              ? codeModel.ref(((Conversion<?>) getConversion(schemaOption.getLogicalType())).getConvertedType())
+              : null;
+
       JExpression condition;
-      /**
-       * In Avro-1.4, neither GenericEnumSymbol or GenericFixed has associated schema, so we don't expect to see
+      /*
+       * In Avro-1.4, neither GenericEnumSymbol nor GenericFixed has associated schema, so we don't expect to see
        * two or more Enum types or two or more Fixed types in the same Union in generic mode since the writer couldn't
-       * differentiate the Enum types or the Fixed types, but those scenarios are well supported in Avro-1.7 or above since
+       * differentiate the Enum types or the Fixed types, but those scenarios are well-supported in Avro-1.7 or above since
        * both of them have associated 'Schema', so the serializer could recognize the right type
        * by checking the associated 'Schema' in generic mode.
        */
@@ -311,6 +364,8 @@ public class FastSerializerGenerator<T> extends FastSerdeBase {
       } else {
         if (unionExpr instanceof JVar && ((JVar)unionExpr).type().equals(rawOptionClass)) {
           condition = null;
+        } else if (optionLogicalTypeClass != null) {
+          condition = unionExpr._instanceof(optionLogicalTypeClass);
         } else {
           condition = unionExpr._instanceof(rawOptionClass);
         }
@@ -322,16 +377,32 @@ public class FastSerializerGenerator<T> extends FastSerdeBase {
         ifBlock = ifBlock != null ? ifBlock._elseif(condition) : body._if(condition);
         unionTypeProcessingBlock = ifBlock._then();
       }
+
       unionTypeProcessingBlock.invoke(JExpr.direct(ENCODER), "writeIndex")
           .arg(JExpr.lit(getIndexNamedForUnion(unionSchema, schemaOption)));
 
       if (schemaOption.getType().equals(Schema.Type.UNION) || schemaOption.getType().equals(Schema.Type.NULL)) {
         throw new FastSerdeGeneratorException("Incorrect union subschema processing: " + schemaOption);
       }
+
+      JExpression valueExpressionToForward = unionExpr;
+
+      if (optionLogicalTypeClass != null) {
+        JFieldRef schemaFieldRef = injectLogicalTypeSchema(schemaOption);
+
+        valueExpressionToForward = unionTypeProcessingBlock.decl(codeModel.ref(Object.class), getUniqueName("convertedValue"),
+                codeModel.ref(Conversions.class)
+                        .staticInvoke("convertToRawType")
+                        .arg(unionExpr)
+                        .arg(schemaFieldRef)
+                        .arg(schemaFieldRef.invoke("getLogicalType"))
+                        .arg(getConversionRef(schemaOption.getLogicalType())));
+      }
+
       if (SchemaAssistant.isComplexType(schemaOption)) {
-        processComplexType(schemaOption, JExpr.cast(optionClass, unionExpr), unionTypeProcessingBlock);
+        processComplexType(schemaOption, JExpr.cast(optionClass, valueExpressionToForward), unionTypeProcessingBlock);
       } else {
-        processSimpleType(schemaOption, unionExpr, unionTypeProcessingBlock);
+        processSimpleType(schemaOption, valueExpressionToForward, unionTypeProcessingBlock);
       }
     }
   }

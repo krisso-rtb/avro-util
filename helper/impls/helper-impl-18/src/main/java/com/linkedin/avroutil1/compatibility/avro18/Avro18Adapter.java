@@ -34,11 +34,11 @@ import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaNormalization;
 import org.apache.avro.generic.GenericData;
+import org.apache.avro.generic.GenericDatumReader;
+import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.io.Avro18BinaryDecoderAccessUtil;
 import org.apache.avro.io.BinaryDecoder;
 import org.apache.avro.io.BinaryEncoder;
-import org.apache.avro.io.DatumReader;
-import org.apache.avro.io.DatumWriter;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.io.Encoder;
@@ -222,12 +222,22 @@ public class Avro18Adapter implements AvroAdapter {
   }
 
   @Override
-  public DatumWriter<?> newSpecificDatumWriter(Schema writer, SpecificData specificData) {
+  public GenericDatumWriter<?> newGenericDatumWriter(Schema writer, GenericData genericData) {
+    return new GenericDatumWriter<>(writer, genericData);
+  }
+
+  @Override
+  public GenericDatumReader<?> newGenericDatumReader(Schema writer, Schema reader, GenericData genericData) {
+    return new GenericDatumReader<>(writer, reader, genericData);
+  }
+
+  @Override
+  public SpecificDatumWriter<?> newSpecificDatumWriter(Schema writer, SpecificData specificData) {
     return new SpecificDatumWriter<>(writer, specificData);
   }
 
   @Override
-  public DatumReader<?> newSpecificDatumReader(Schema writer, Schema reader, SpecificData specificData) {
+  public SpecificDatumReader<?> newSpecificDatumReader(Schema writer, Schema reader, SpecificData specificData) {
     return new SpecificDatumReader<>(writer, reader, specificData);
   }
 

@@ -1,8 +1,5 @@
 package com.linkedin.avro.fastserde;
 
-import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelper;
-import com.linkedin.avroutil1.compatibility.AvroVersion;
-import com.linkedin.avroutil1.compatibility.AvscGenerationConfig;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -10,11 +7,25 @@ import java.io.IOException;
 import java.security.CodeSource;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.StringJoiner;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.stream.Collectors;
+
 import org.apache.avro.Schema;
+import org.apache.commons.lang3.StringUtils;
+
+import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelper;
+import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelperCommon;
+import com.linkedin.avroutil1.compatibility.AvroVersion;
+import com.linkedin.avroutil1.compatibility.AvscGenerationConfig;
 
 
 public class Utils {
@@ -69,6 +80,13 @@ public class Utils {
 
   public static boolean isSupportedAvroVersionsForSerializer() {
     return AVRO_VERSIONS_SUPPORTED_FOR_SERIALIZER.contains(AvroCompatibilityHelper.getRuntimeAvroVersion());
+  }
+
+  public static boolean isLogicalTypeSupported() {
+    // Formally Avro_1.8 supports LogicalTypes however there are significant changes compared to versions >=1.9
+    // To see rationale simply compare imports in org.apache.avro.data.TimeConversions class between 1.8 and 1.9+
+    // Basically 1.8 uses joda.time but 1.9+ uses java.time
+    return AvroCompatibilityHelperCommon.getRuntimeAvroVersion().laterThan(AvroVersion.AVRO_1_8);
   }
 
   public static boolean isWindows() {
@@ -190,6 +208,9 @@ public class Utils {
       }
 
       StringJoiner pathJoiner = new StringJoiner(File.pathSeparator);
+      // TODO temp hack, inferCompileDependencies from Avro class as well
+      pathJoiner.add("/Users/kris/git/rtb-projects/common-domain/target/common-domain-1.0.jar");
+
       if (existingCompileClasspath != null && !existingCompileClasspath.isEmpty()) {
         pathJoiner.add(existingCompileClasspath);
       }
@@ -224,5 +245,20 @@ public class Utils {
       }
       return pathJoiner.toString();
     }
+  }
+
+  public static String toValidJavaIdentifier(String javaIdentifier) { // TODO unit tests
+    if (StringUtils.isBlank(javaIdentifier)) {
+      throw new NullPointerException("Expected not-blank identifier!");
+    }
+
+    javaIdentifier = StringUtils.deleteWhitespace(javaIdentifier)
+            .replaceAll("\\W+", "_");
+
+    if (!Character.isAlphabetic(javaIdentifier.charAt(0))) {
+      javaIdentifier = "a_" + javaIdentifier;
+    }
+
+    return javaIdentifier;
   }
 }
