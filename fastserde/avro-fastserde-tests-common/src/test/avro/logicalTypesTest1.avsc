@@ -1,0 +1,81 @@
+{
+  "type": "record",
+  "name": "FastSerdeLogicalTypesTest1",
+  "namespace": "com.linkedin.avro.fastserde.generated.avro",
+  "doc": "Used in tests to confirm fast-serde supports logical-types",
+  "fields": [
+    {
+      "name": "decimalOrDateUnion",
+      "type": [
+        {
+          "type": "bytes",
+          "logicalType": "decimal",
+          "precision": 4,
+          "scale": 2
+        },
+        {
+          "type": "int",
+          "logicalType": "date"
+        }
+      ]
+    },
+    {
+      "name": "uuidField",
+      "type": {
+        "type": "string",
+        "logicalType": "uuid"
+      }
+    },
+    {
+      "name": "timestampMillisField",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "timestampMicrosField",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-micros"
+      }
+    },
+    {
+      "name": "timeMillisField",
+      "type": {
+        "type": "int",
+        "logicalType": "time-millis"
+      }
+    },
+    {
+      "name": "timeMicrosField",
+      "type": {
+        "type": "long",
+        "logicalType": "time-micros"
+      }
+    },
+    {
+      "name": "dateField",
+      "type": {
+        "type": "int",
+        "logicalType": "date"
+      }
+    },
+    {
+      "name": "nestedLocalTimestampMillis",
+      "type": {
+        "name": "LocalTimestampRecord",
+        "type": "record",
+        "fields": [
+          {
+            "name": "nestedTimestamp",
+            "type": {
+              "type": "long",
+              "logicalType": "local-timestamp-millis"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
