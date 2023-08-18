@@ -169,32 +169,19 @@ public class FastSerializerGenerator<T, U extends GenericData> extends FastSerde
 
       if (SchemaAssistant.isComplexType(fieldSchema)) {
         JClass fieldClass = schemaAssistant.classFromSchema(fieldSchema);
-        JVar containerVar = declareValueVar(field.name(), fieldSchema, body);
-
-        if (logicalTypeEnabled(fieldSchema)) { // TODO unions
-          // TODO konwersja zamiast rzutowania, dodać unie do kilku typów
-          // Object decimalOrUuidUnion0 = ((Object) fieldValue3);
-
-
-        }
-
-        containerVar.init(JExpr.cast(fieldClass, fieldValue));
-
+        JVar containerVar = body.decl(fieldClass, getUniqueName(field.name()), JExpr.cast(fieldClass, fieldValue));
         processComplexType(fieldSchema, containerVar, body);
       } else {
-        if (logicalTypeEnabled(fieldSchema)) { // TODO unions ?
-          JFieldRef schemaFieldRef = injectLogicalTypeSchema(fieldSchema);
-
-          body.assign(fieldValue, codeModel.ref(Conversions.class)
-                  .staticInvoke("convertToRawType")
-                  .arg(fieldValue)
-                  .arg(schemaFieldRef)
-                  .arg(schemaFieldRef.invoke("getLogicalType"))
-                  .arg(getConversionRef(fieldSchema.getLogicalType())));
-
-          // TODO remove
-          // Conversions.convertToRawType(fieldValue, fieldSchema, fieldSchema.getLogicalType(), conversion);
-        }
+//        if (logicalTypeEnabled(fieldSchema)) { // TODO unions ?
+//          JFieldRef schemaFieldRef = injectLogicalTypeSchema(fieldSchema);
+//
+//          body.assign(fieldValue, codeModel.ref(Conversions.class)
+//                  .staticInvoke("convertToRawType")
+//                  .arg(fieldValue)
+//                  .arg(schemaFieldRef)
+//                  .arg(schemaFieldRef.invoke("getLogicalType"))
+//                  .arg(getConversionRef(fieldSchema.getLogicalType())));
+//        }
 
         processSimpleType(fieldSchema, fieldValue, body);
       }
@@ -206,6 +193,8 @@ public class FastSerializerGenerator<T, U extends GenericData> extends FastSerde
     body.invoke(JExpr.direct(ENCODER), "writeArrayStart");
 
     final JExpression emptyArrayCondition = arrayExpr.eq(JExpr._null()).cor(JExpr.invoke(arrayExpr, "isEmpty"));
+    // Trick added to support logical types, e.g. (List<LocalDate> instanceof PrimitiveIntList) - can't compile
+    JVar arrayVar = body.decl(codeModel.ref(Object.class), getUniqueName("array"), arrayExpr);
 
     ifCodeGen(body, emptyArrayCondition, then1 -> {
       then1.invoke(JExpr.direct(ENCODER), "setItemCount").arg(JExpr.lit(0));
@@ -214,10 +203,10 @@ public class FastSerializerGenerator<T, U extends GenericData> extends FastSerde
 
       if (SchemaAssistant.isPrimitive(arraySchema.getElementType())) {
         JClass primitiveListInterface = schemaAssistant.classFromSchema(arraySchema, true, false, true);
-        final JExpression primitiveListCondition = arrayExpr._instanceof(primitiveListInterface);
+        final JExpression primitiveListCondition = arrayVar._instanceof(primitiveListInterface);
         ifCodeGen(else1, primitiveListCondition, then2 -> {
-          final JVar primitiveList = declareValueVar("primitiveList", arraySchema, then2, true, false, true);
-          then2.assign(primitiveList, JExpr.cast(primitiveListInterface, arrayExpr));
+          final JVar primitiveList = declareValueVar("primitiveList", arraySchema, then2, true, false, true)
+                  .init(JExpr.cast(primitiveListInterface, arrayVar));
           processArrayElementLoop(arraySchema, arrayClass, primitiveList, then2, "getPrimitive");
         }, else2 -> {
           processArrayElementLoop(arraySchema, arrayClass, arrayExpr, else2, "get");
@@ -346,7 +335,7 @@ public class FastSerializerGenerator<T, U extends GenericData> extends FastSerde
       JClass optionClass = schemaAssistant.classFromSchema(schemaOption);
       JClass rawOptionClass = schemaAssistant.classFromSchema(schemaOption, true, true);
       JClass optionLogicalTypeClass = logicalTypeEnabled(schemaOption)
-              ? codeModel.ref(((Conversion<?>) getConversion(schemaOption.getLogicalType())).getConvertedType())
+              ? codeModel.ref(((Conversion<?>) schemaAssistant.getConversion(schemaOption.getLogicalType())).getConvertedType())
               : null;
 
       JExpression condition;
@@ -387,17 +376,17 @@ public class FastSerializerGenerator<T, U extends GenericData> extends FastSerde
 
       JExpression valueExpressionToForward = unionExpr;
 
-      if (optionLogicalTypeClass != null) {
-        JFieldRef schemaFieldRef = injectLogicalTypeSchema(schemaOption);
-
-        valueExpressionToForward = unionTypeProcessingBlock.decl(codeModel.ref(Object.class), getUniqueName("convertedValue"),
-                codeModel.ref(Conversions.class)
-                        .staticInvoke("convertToRawType")
-                        .arg(unionExpr)
-                        .arg(schemaFieldRef)
-                        .arg(schemaFieldRef.invoke("getLogicalType"))
-                        .arg(getConversionRef(schemaOption.getLogicalType())));
-      }
+//      if (optionLogicalTypeClass != null) {
+//        JFieldRef schemaFieldRef = injectLogicalTypeSchema(schemaOption);
+//
+//        valueExpressionToForward = unionTypeProcessingBlock.decl(codeModel.ref(Object.class), getUniqueName("convertedValue"),
+//                codeModel.ref(Conversions.class)
+//                        .staticInvoke("convertToRawType")
+//                        .arg(unionExpr)
+//                        .arg(schemaFieldRef)
+//                        .arg(schemaFieldRef.invoke("getLogicalType"))
+//                        .arg(getConversionRef(schemaOption.getLogicalType())));
+//      }
 
       if (SchemaAssistant.isComplexType(schemaOption)) {
         processComplexType(schemaOption, JExpr.cast(optionClass, valueExpressionToForward), unionTypeProcessingBlock);
@@ -465,11 +454,27 @@ public class FastSerializerGenerator<T, U extends GenericData> extends FastSerde
   }
 
   private void processPrimitive(final Schema primitiveSchema, JExpression primitiveValueExpression, JBlock body, boolean cast) {
+    JClass primitiveClass = schemaAssistant.classFromSchema(primitiveSchema, true, false, false, false);
+
     String writeFunction;
-    JClass primitiveClass = schemaAssistant.classFromSchema(primitiveSchema);
-    JExpression writeFunctionArgument = cast
-        ? JExpr.cast(primitiveClass, primitiveValueExpression)
-        : primitiveValueExpression;
+    JExpression writeFunctionArgument;
+
+    if (logicalTypeEnabled(primitiveSchema)) {
+      JVar convertedValue = body.decl(codeModel.ref(Object.class), getUniqueName("convertedValue"), primitiveValueExpression);
+      JFieldRef schemaFieldRef = injectLogicalTypeSchema(primitiveSchema);
+
+      body.assign(convertedValue, codeModel.ref(Conversions.class)
+              .staticInvoke("convertToRawType")
+              .arg(convertedValue)
+              .arg(schemaFieldRef)
+              .arg(schemaFieldRef.invoke("getLogicalType"))
+              .arg(getConversionRef(primitiveSchema.getLogicalType())));
+
+      writeFunctionArgument = JExpr.cast(primitiveClass, convertedValue);
+    } else {
+      writeFunctionArgument = cast ? JExpr.cast(primitiveClass, primitiveValueExpression) : primitiveValueExpression;
+    }
+
     switch (primitiveSchema.getType()) {
       case STRING:
         processString(primitiveSchema, primitiveValueExpression, body);

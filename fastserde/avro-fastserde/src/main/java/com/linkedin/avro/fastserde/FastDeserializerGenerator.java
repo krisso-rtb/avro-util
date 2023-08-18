@@ -769,7 +769,8 @@ public class FastDeserializerGenerator<T, U extends GenericData> extends FastDes
       action = FieldAction.fromValues(arraySchema.getElementType().getType(), false, EMPTY_SYMBOL);
     }
 
-    final JVar arrayVar = action.getShouldRead() ? declareValueVar(name, effectiveArrayReaderSchema, parentBody, true, false, true) : null;
+    final boolean useLogicalType = action.getShouldRead() && logicalTypeEnabled(effectiveArrayReaderSchema.getElementType());
+    final JVar arrayVar = action.getShouldRead() ? declareValueVar(name, effectiveArrayReaderSchema, parentBody, true, false, !useLogicalType) : null;
     /**
      * Special optimization for float array by leveraging {@link BufferBackedPrimitiveFloatList}.
      *
@@ -795,11 +796,12 @@ public class FastDeserializerGenerator<T, U extends GenericData> extends FastDes
     final Supplier<JExpression> finalReuseSupplier = potentiallyCacheInvocation(reuseSupplier, parentBody, "oldArray");
     if (finalAction.getShouldRead()) {
 
-      JClass arrayClass = schemaAssistant.classFromSchema(effectiveArrayReaderSchema, false, false, true);
-      JClass abstractErasedArrayClass = schemaAssistant.classFromSchema(effectiveArrayReaderSchema, true, false, true).erasure();
+      JClass arrayClass = schemaAssistant.classFromSchema(effectiveArrayReaderSchema, false, false, !useLogicalType);
+      JClass abstractErasedArrayClass = schemaAssistant.classFromSchema(effectiveArrayReaderSchema, true, false, !useLogicalType).erasure();
 
       JInvocation newArrayExp = JExpr._new(arrayClass).arg(JExpr.cast(codeModel.INT, chunkLen));
-      if (useGenericTypes && !SchemaAssistant.isPrimitive(effectiveArrayReaderSchema.getElementType())) {
+
+      if (useGenericTypes && (useLogicalType || !SchemaAssistant.isPrimitive(effectiveArrayReaderSchema.getElementType()))) {
         /**
          * N.B.: The ColdPrimitiveXList implementations do not take the schema as a constructor param,
          * but the {@link org.apache.avro.generic.GenericData.Array} does.
@@ -829,7 +831,7 @@ public class FastDeserializerGenerator<T, U extends GenericData> extends FastDes
     JVar elementSchemaVar = null;
     BiConsumer<JBlock, JExpression> putValueInArray = null;
     if (finalAction.getShouldRead()) {
-      String addMethod = SchemaAssistant.isPrimitive(effectiveArrayReaderSchema.getElementType())
+      String addMethod = SchemaAssistant.isPrimitive(effectiveArrayReaderSchema.getElementType()) && !logicalTypeEnabled(effectiveArrayReaderSchema.getElementType())
           ? "addPrimitive"
           : "add";
       putValueInArray = (block, expression) -> block.invoke(arrayVar, addMethod).arg(expression);
@@ -1284,6 +1286,7 @@ public class FastDeserializerGenerator<T, U extends GenericData> extends FastDes
 
       if (logicalTypeEnabled(schema)) {
         JFieldRef schemaFieldRef = injectLogicalTypeSchema(schema);
+        Conversion<?> conversion = (Conversion<?>) schemaAssistant.getConversion(schema.getLogicalType());
 
         JInvocation valueConvertedToLogicalType = codeModel.ref(Conversions.class)
                 .staticInvoke("convertToLogicalType")
@@ -1292,7 +1295,7 @@ public class FastDeserializerGenerator<T, U extends GenericData> extends FastDes
                 .arg(schemaFieldRef.invoke("getLogicalType"))
                 .arg(getConversionRef(schema.getLogicalType()));
 
-        putValueIntoParent.accept(body, valueConvertedToLogicalType);
+        putValueIntoParent.accept(body, JExpr.cast(codeModel.ref(conversion.getConvertedType()), valueConvertedToLogicalType));
       } else {
       putValueIntoParent.accept(body, primitiveValueExpression);
       }

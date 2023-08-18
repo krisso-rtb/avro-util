@@ -5,6 +5,59 @@
   "doc": "Used in tests to confirm fast-serde supports logical-types",
   "fields": [
     {
+      "name": "unionOfArrayAndMap",
+      "type": [
+        {
+          "type": "array",
+          "items": {
+            "type": "int",
+            "logicalType": "time-millis"
+          }
+        },
+        {
+          "type": "map",
+          "values": {
+            "type": "int",
+            "logicalType": "date"
+          }
+        }
+      ]
+    },
+    {
+      "name": "timestampMillisMap",
+      "type": {
+        "type": "map",
+        "values": {
+          "type": "long",
+          "logicalType": "timestamp-millis"
+        }
+      }
+    },
+    {
+      "name": "nullableArrayOfDates",
+      "type": [
+        "null",
+        {
+          "type": "array",
+          "items": {
+            "type": "int",
+            "logicalType": "date"
+          }
+        }
+      ],
+      "default": null
+    },
+    {
+      "name": "arrayOfDates",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "int",
+          "logicalType": "date"
+        }
+      }
+    },
+    {
       "name": "decimalOrDateUnion",
       "type": [
         {
@@ -73,6 +126,43 @@
               "type": "long",
               "logicalType": "local-timestamp-millis"
             }
+          },
+          {
+            "name": "nullableNestedTimestamp",
+            "type": [
+              "null",
+              {
+                "type": "long",
+                "logicalType": "local-timestamp-millis"
+              }
+            ]
+          },
+          {
+            "name": "mixedNestedTimestamp",
+            "type": [
+              {
+                "type": "int",
+                "logicalType": "date"
+              },
+              {
+                "type": "long",
+                "logicalType": "local-timestamp-millis"
+              }
+            ]
+          },
+          {
+            "name": "nullableMixedNestedTimestamp",
+            "type": [
+              "null",
+              {
+                "type": "int",
+                "logicalType": "date"
+              },
+              {
+                "type": "long",
+                "logicalType": "local-timestamp-millis"
+              }
+            ]
           }
         ]
       }

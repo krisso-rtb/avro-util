@@ -62,7 +62,7 @@ public abstract class FastSerdeBase<T extends GenericData> {
   protected final String generatedPackageName;
   protected final JCodeModel codeModel = new JCodeModel();
   protected final boolean useGenericTypes;
-  protected final SchemaAssistant schemaAssistant;
+  protected final SchemaAssistant<T> schemaAssistant;
   protected final File destination;
   protected final ClassLoader classLoader;
   protected final String compileClassPath;
@@ -76,7 +76,7 @@ public abstract class FastSerdeBase<T extends GenericData> {
   public FastSerdeBase(String description, boolean useGenericTypes, Class defaultStringClass, File destination, ClassLoader classLoader,
       String compileClassPath, T modelData, boolean isForSerializer) {
     this.useGenericTypes = useGenericTypes;
-    this.schemaAssistant = new SchemaAssistant(codeModel, useGenericTypes, defaultStringClass, isForSerializer);
+    this.schemaAssistant = new SchemaAssistant<>(codeModel, useGenericTypes, defaultStringClass, modelData, isForSerializer);
     this.destination = destination;
     this.classLoader = classLoader;
     this.compileClassPath = (null == compileClassPath ? "" : compileClassPath);
@@ -146,7 +146,7 @@ public abstract class FastSerdeBase<T extends GenericData> {
   }
 
   protected JFieldRef getConversionRef(LogicalType logicalType) {
-    final Conversion<?> conversion = (Conversion<?>) getConversion(logicalType);
+    final Conversion<?> conversion = (Conversion<?>) schemaAssistant.getConversion(logicalType);
     final String conversionFieldName = toConversionFieldName(conversion);
 
     if (injectedConversionFieldNames.add(conversionFieldName)) {
@@ -155,46 +155,6 @@ public abstract class FastSerdeBase<T extends GenericData> {
     }
 
     return JExpr.refthis(conversionFieldName);
-  }
-
-  protected Object getConversion(LogicalType logicalType) {
-    Conversion<?> conversion = modelData.getConversionFor(logicalType);
-    if (conversion != null) {
-      return conversion;
-    } else {
-      return getDefaultConversion(logicalType);
-    }
-  }
-
-  private Object getDefaultConversion(LogicalType logicalType) {
-    // used as a fallback when no conversion is provided by modelData
-    if (logicalType == null) {
-      throw new NullPointerException("Expected not-null logicalType");
-    }
-
-    switch (logicalType.getName()) {
-      case "decimal":
-        return new Conversions.DecimalConversion();
-      case "uuid":
-        return new Conversions.UUIDConversion();
-      case "date":
-        return new TimeConversions.DateConversion();
-      case "time-millis":
-        return new TimeConversions.TimeMillisConversion();
-      case "time-micros":
-        return new TimeConversions.TimeMicrosConversion();
-      case "timestamp-millis":
-        return new TimeConversions.TimestampMillisConversion();
-      case "timestamp-micros":
-        return new TimeConversions.TimestampMicrosConversion();
-      case "local-timestamp-millis":
-        return new TimeConversions.LocalTimestampMillisConversion();
-      case "local-timestamp-micros":
-        return new TimeConversions.LocalTimestampMicrosConversion();
-      case "duration": // TODO no default implementation?
-      default:
-        throw new UnsupportedOperationException("LogicalType " + logicalType.getName() + " is not supported");
-    }
   }
 
   protected JFieldRef injectLogicalTypeSchema(Schema schema) {
@@ -217,18 +177,7 @@ public abstract class FastSerdeBase<T extends GenericData> {
   }
 
   protected boolean logicalTypeEnabled(Schema schema) {
-//    return modelData != null && schema != null && Utils.isLogicalTypeSupported() && schema.getLogicalType() != null;
-    // TODO uuid in 1.10 no supported ??
-
-    if (modelData != null && schema != null && Utils.isLogicalTypeSupported()) {
-      if (schema.getLogicalType() == LogicalTypes.uuid()) {
-        return AvroCompatibilityHelperCommon.getRuntimeAvroVersion() == AvroVersion.AVRO_1_11;
-      } else {
-        return schema.getLogicalType() != null;
-      }
-    } else {
-      return false;
-    }
+    return schemaAssistant.logicalTypeEnabled(schema);
   }
 
   protected String toConversionFieldName(Conversion<?> conversion) {
