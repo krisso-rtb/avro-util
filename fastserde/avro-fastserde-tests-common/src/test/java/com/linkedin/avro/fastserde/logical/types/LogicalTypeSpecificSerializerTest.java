@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
-import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -20,8 +20,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
-
-import javax.management.InstanceAlreadyExistsException;
 
 import org.apache.avro.Conversion;
 import org.apache.avro.Conversions;
@@ -37,6 +35,7 @@ import org.apache.avro.specific.SpecificData;
 import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.avro.specific.SpecificDatumWriter;
 import org.testng.Assert;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 import org.testng.collections.Lists;
 
@@ -48,39 +47,79 @@ import com.linkedin.avro.fastserde.generated.avro.FastSerdeLogicalTypesTest1;
 import com.linkedin.avro.fastserde.generated.avro.LocalTimestampRecord;
 import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelperCommon;
 import com.linkedin.avroutil1.compatibility.AvroVersion;
+import com.linkedin.avroutil1.compatibility.SchemaNormalization;
 
 public class LogicalTypeSpecificSerializerTest {
 
     private final int v1HeaderLength = 10;
 
-    //  @org.testng.annotations.Ignore
-    @Test(groups = {"serializationTest"})
-    public void shouldWriteLongAsLogicalTypeInstant() throws IOException {
+    @DataProvider
+    public static Object[][] logicalTypesTestCases() {
+        LocalDate now = LocalDate.now();
+        LocalDate localDate = LocalDate.of(2023, 8, 11);
+
+        Map<String, LocalDate> mapOfDates = new HashMap<>();
+        mapOfDates.put("today", now);
+        mapOfDates.put("yesterday", now.minusDays(1));
+        mapOfDates.put("tomorrow", now.plusDays(1));
+
+        Object[] unionOfArrayAndMapOptions = {
+                Lists.newArrayList(LocalTime.now(), LocalTime.now().plusMinutes(1)), mapOfDates};
+        Object[] nullableArrayOfDatesOptions = {
+                null, Lists.newArrayList(localDate, localDate.plusDays(11), localDate.plusDays(22))};
+        Object[] decimalOrDateOptions = {new BigDecimal("3.14"), LocalDate.of(2023, 3, 14)};
+        Object[] nullableUnionOfDateAndLocalTimestampOptions = {null, now.minusDays(12), localDate.atStartOfDay()};
+        Object[] unionOfDateAndLocalTimestampOptions = {now.minusDays(12), localDate.atStartOfDay()};
+
+        List<Object[]> allOptions = new ArrayList<>();
+
+        for (Object unionOfArrayAndMap : unionOfArrayAndMapOptions) {
+            for (Object nullableArrayOfDates : nullableArrayOfDatesOptions) {
+                for (Object decimalOrDate : decimalOrDateOptions) {
+                    for (Object nullableUnionOfDateAndLocalTimestamp: nullableUnionOfDateAndLocalTimestampOptions) {
+                        for (Object unionOfDateAndLocalTimestamp : unionOfDateAndLocalTimestampOptions) {
+                            allOptions.add(new Object[]{unionOfArrayAndMap, nullableArrayOfDates, decimalOrDate,
+                                    nullableUnionOfDateAndLocalTimestamp, unionOfDateAndLocalTimestamp});
+                        }
+                    }
+                }
+            }
+        }
+
+        return allOptions.toArray(new Object[0][]);
+    }
+
+    @Test(groups = "serializationTest", dataProvider = "logicalTypesTestCases")
+    public void shouldWriteAndReadLogicalTypes(Object unionOfArrayAndMap, List<LocalDate> nullableArrayOfDates,
+            Object decimalOrDate, Object nullableUnionOfDateAndLocalTimestamp, Object unionOfDateAndLocalTimestamp) throws IOException {
         // given
         LocalDate localDate = LocalDate.of(2023, 8, 11);
         Instant instant = localDate.atStartOfDay().toInstant(ZoneOffset.UTC);
-        Instant nextDay = instant.plus(1, ChronoUnit.DAYS);
+
         FastSerdeLogicalTypesTest1.Builder builder = FastSerdeLogicalTypesTest1.newBuilder()
-                .setUnionOfArrayAndMap(Lists.newArrayList(LocalTime.now(), LocalTime.now().plusMinutes(1)))
+                .setUnionOfArrayAndMap(unionOfArrayAndMap)
                 .setTimestampMillisMap(createTimestampMillisMap())
-                .setNullableArrayOfDates(Lists.newArrayList(List.of(localDate.minusDays(1), localDate)))
+                .setNullableArrayOfDates(nullableArrayOfDates)
                 .setArrayOfDates(Lists.newArrayList(localDate, localDate.plusDays(1), localDate.plusDays(2)))
-//                .setDecimalOrDateUnion(new BigDecimal("12.34"))
-                .setDecimalOrDateUnion(localDate)
+                .setUnionOfDecimalOrDate(decimalOrDate)
                 .setTimestampMillisField(instant)
                 .setTimestampMicrosField(instant)
                 .setTimeMillisField(LocalTime.of(14, 17, 45, 12345))
                 .setTimeMicrosField(LocalTime.of(14, 17, 45, 12345))
                 .setDateField(localDate)
-                .setNestedLocalTimestampMillis(createLocalTimestampRecord(nextDay));
+                .setNestedLocalTimestampMillis(createLocalTimestampRecord(nullableUnionOfDateAndLocalTimestamp, unionOfDateAndLocalTimestamp));
         injectUuidField(builder);
         FastSerdeLogicalTypesTest1 inputData = builder.build();
 
+        // all serializers produce the same array of bytes
         byte[] bytesWithHeader = verifySerializers(inputData);
+
+        // all deserializers create (logically) the same data (in generic or specific representation)
         verifyDeserializers(bytesWithHeader);
     }
 
     private byte[] verifySerializers(FastSerdeLogicalTypesTest1 data) throws IOException {
+        // given
         FastSerdeCache fastSerdeCache = FastSerdeCache.getDefaultInstance();
 
         @SuppressWarnings("unchecked")
@@ -99,19 +138,20 @@ public class LogicalTypeSpecificSerializerTest {
 
         fixConversionsIfAvro19(data.getSpecificData());
 
+        // when
         byte[] fastGenericBytes = serialize(fastGenericSerializer, data);
         byte[] fastSpecificBytes = serialize(fastSpecificSerializer, data);
         byte[] genericBytes = serialize(genericDatumWriter, data);
         byte[] specificBytes = serialize(specificDatumWriter, data);
-        byte[] bytesWithHeader = data.toByteBuffer().array();
+        byte[] bytesWithHeader = data.toByteBuffer().array(); // contains 10 extra bytes at the beginning
 
         byte[] expectedHeaderBytes = ByteBuffer.wrap(new byte[v1HeaderLength])
                 .order(ByteOrder.LITTLE_ENDIAN)
                 .put(new byte[]{(byte) 0xC3, (byte) 0x01}) // BinaryMessageEncoder.V1_HEADER
-                .putLong(Utils.getSchemaFingerprint(data.getSchema()))
+                .putLong(SchemaNormalization.parsingFingerprint64(data.getSchema()))
                 .array();
 
-        // all 5 serializing methods should return the same array of bytes
+        // then all 5 serializing methods should return the same array of bytes
         Assert.assertEquals(Arrays.copyOf(bytesWithHeader, v1HeaderLength), expectedHeaderBytes);
         Assert.assertEquals(fastGenericBytes, Arrays.copyOfRange(bytesWithHeader, v1HeaderLength, bytesWithHeader.length));
         Assert.assertEquals(fastGenericBytes, fastSpecificBytes);
@@ -121,20 +161,8 @@ public class LogicalTypeSpecificSerializerTest {
         return bytesWithHeader;
     }
 
-    private <T> byte[] serialize(FastSerializer<T> fastSerializer, T data) throws IOException {
-        InMemoryEncoder encoder = new InMemoryEncoder();
-        fastSerializer.serialize(data, encoder);
-        return encoder.toByteArray();
-    }
-
-    private <T> byte[] serialize(DatumWriter<T> datumWriter, T data) throws IOException {
-        InMemoryEncoder encoder = new InMemoryEncoder();
-        datumWriter.write(data, encoder);
-
-        return encoder.toByteArray();
-    }
-
     private void verifyDeserializers(byte[] bytesWithHeader) throws IOException {
+        // given
         FastSerdeLogicalTypesTest1 data = FastSerdeLogicalTypesTest1.fromByteBuffer(ByteBuffer.wrap(bytesWithHeader));
         byte[] bytes = Arrays.copyOfRange(bytesWithHeader, v1HeaderLength, bytesWithHeader.length);
         Schema schema = data.getSchema();
@@ -156,18 +184,45 @@ public class LogicalTypeSpecificSerializerTest {
         SpecificDatumReader<FastSerdeLogicalTypesTest1> specificDatumReader = new SpecificDatumReader<>(
                 schema, schema, copyConversions(data.getSpecificData(), new SpecificData()));
 
-        // deserializing with different serializers/writers
+        // when deserializing with different serializers/writers
         GenericData.Record deserializedFastGeneric = fastGenericDeserializer.deserialize(decoderSupplier.get());
         FastSerdeLogicalTypesTest1 deserializedFastSpecific = fastSpecificDeserializer.deserialize(decoderSupplier.get());
         GenericData.Record deserializedGenericReader = genericDatumReader.read(null, decoderSupplier.get());
         FastSerdeLogicalTypesTest1 deserializedSpecificReader = specificDatumReader.read(null, decoderSupplier.get());
 
-        // TODO porównać obiekty !?!?
+        // then
+        Assert.assertEquals(deserializedFastSpecific, data);
+        Assert.assertEquals(deserializedSpecificReader, data);
+        assertEquals(deserializedFastGeneric, data);
+        assertEquals(deserializedGenericReader, data);
+    }
 
-        Assert.assertEquals(deserializedFastGeneric.toString(), data.toString());
-        Assert.assertEquals(deserializedFastSpecific.toString(), data.toString());
-        Assert.assertEquals(deserializedGenericReader.toString(), data.toString());
-        Assert.assertEquals(deserializedSpecificReader.toString(), data.toString());
+    private void assertEquals(GenericData.Record actual, FastSerdeLogicalTypesTest1 expected) throws IOException {
+        Assert.assertEquals(actual.toString(), expected.toString());
+
+        GenericDatumWriter<GenericData.Record> genericDatumWriter = new GenericDatumWriter<>(
+                actual.getSchema(), copyConversions(expected.getSpecificData(), new GenericData()));
+
+        SpecificDatumWriter<FastSerdeLogicalTypesTest1> specificDatumWriter = new SpecificDatumWriter<>(
+                expected.getSchema(), copyConversions(expected.getSpecificData(), new SpecificData()));
+
+        byte[] genericBytes = serialize(genericDatumWriter, actual);
+        byte[] expectedBytes = serialize(specificDatumWriter, expected);
+
+        Assert.assertEquals(genericBytes, expectedBytes);
+    }
+
+    private <T> byte[] serialize(FastSerializer<T> fastSerializer, T data) throws IOException {
+        InMemoryEncoder encoder = new InMemoryEncoder();
+        fastSerializer.serialize(data, encoder);
+        return encoder.toByteArray();
+    }
+
+    private <T> byte[] serialize(DatumWriter<T> datumWriter, T data) throws IOException {
+        InMemoryEncoder encoder = new InMemoryEncoder();
+        datumWriter.write(data, encoder);
+
+        return encoder.toByteArray();
     }
 
     private <T extends GenericData> T copyConversions(SpecificData fromSpecificData, T toModelData) {
@@ -212,31 +267,22 @@ public class LogicalTypeSpecificSerializerTest {
         return map;
     }
 
-    private Instant toInstant(LocalDate localDate) {
-        return localDate.atStartOfDay(ZoneId.systemDefault()).toInstant();
-    }
-
-    private LocalTimestampRecord createLocalTimestampRecord(Instant nestedTimestamp) {
+    private LocalTimestampRecord createLocalTimestampRecord(
+            Object nullableUnionOfDateAndLocalTimestamp, Object unionOfDateAndLocalTimestamp) {
+        Instant nestedTimestamp = toInstant(LocalDate.of(2023, 8, 21));
         LocalTimestampRecord.Builder builder = LocalTimestampRecord.newBuilder();
 
         try {
-            Object mixedNestedTimestamp, nullableMixedNestedTimestamp;
             if (Utils.getRuntimeAvroVersion().laterThan(AvroVersion.AVRO_1_9)) {
-//                mixedNestedTimestamp = LocalDate.of(2023, 8, 16).atStartOfDay(); // TODO data provider
-//                nullableMixedNestedTimestamp = LocalDate.of(2023, 8, 16).atStartOfDay();
-
-                mixedNestedTimestamp = LocalDate.of(2023, 8, 16);
-                nullableMixedNestedTimestamp = LocalDate.of(2023, 8, 16);
-
                 builder.getClass().getMethod("setNestedTimestamp", LocalDateTime.class)
                         .invoke(builder, LocalDateTime.ofInstant(nestedTimestamp, ZoneId.systemDefault()));
                 builder.getClass().getMethod("setNullableNestedTimestamp", LocalDateTime.class)
                         .invoke(builder, LocalDateTime.ofInstant(nestedTimestamp.plusSeconds(10), ZoneId.systemDefault()));
             } else {
-                mixedNestedTimestamp = LocalDate.of(2023, 8, 16).atStartOfDay()
-                        .toInstant(ZoneOffset.UTC).toEpochMilli(); // TODO - different versions
-                nullableMixedNestedTimestamp = LocalDate.of(2023, 8, 16).atStartOfDay()
-                        .toInstant(ZoneOffset.UTC).toEpochMilli();
+                nullableUnionOfDateAndLocalTimestamp = Optional.ofNullable(toInstant(nullableUnionOfDateAndLocalTimestamp))
+                        .map(Instant::toEpochMilli)
+                        .orElse(null);
+                unionOfDateAndLocalTimestamp = toInstant(unionOfDateAndLocalTimestamp).toEpochMilli();
 
                 builder.getClass().getMethod("setNestedTimestamp", Long.TYPE)
                         .invoke(builder, nestedTimestamp.toEpochMilli());
@@ -244,13 +290,25 @@ public class LogicalTypeSpecificSerializerTest {
                         .invoke(builder, nestedTimestamp.toEpochMilli() + 10L);
             }
 
-            builder.setMixedNestedTimestamp(mixedNestedTimestamp);
-            builder.setNullableMixedNestedTimestamp(nullableMixedNestedTimestamp);
+            builder.setNullableUnionOfDateAndLocalTimestamp(nullableUnionOfDateAndLocalTimestamp);
+            builder.setUnionOfDateAndLocalTimestamp(unionOfDateAndLocalTimestamp);
         } catch (NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
 
         return builder.build();
+    }
+
+    private Instant toInstant(Object maybeDate) {
+        if (maybeDate == null) {
+            return null;
+        } else if (maybeDate instanceof LocalDate) {
+            return ((LocalDate) maybeDate).atStartOfDay(ZoneId.systemDefault()).toInstant();
+        } else if (maybeDate instanceof LocalDateTime) {
+            return ((LocalDateTime) maybeDate).toInstant(ZoneOffset.UTC);
+        } else {
+            throw new UnsupportedOperationException(maybeDate + " is not supported (yet)");
+        }
     }
 
     private void injectUuidField(FastSerdeLogicalTypesTest1.Builder builder) {

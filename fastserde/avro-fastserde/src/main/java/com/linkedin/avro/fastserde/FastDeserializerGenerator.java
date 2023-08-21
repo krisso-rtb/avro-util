@@ -19,6 +19,7 @@ import java.util.stream.Collectors;
 
 import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.AvroTypeException;
+import org.apache.avro.Conversion;
 import org.apache.avro.Conversions;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericArray;
@@ -1309,14 +1310,12 @@ public class FastDeserializerGenerator<T, U extends GenericData> extends FastDes
   }
 
   private JVar declareSchemaVar(Schema valueSchema, String variableName, JInvocation getValueType) {
-//    if (!useGenericTypes) { // TODO czy można to wywalić?
-//      return null;
-//    }
+    if (!useGenericTypes) {
+      return null;
+    }
 
-    boolean shouldDeclareSchemaVar = logicalTypeEnabled(valueSchema);
-    shouldDeclareSchemaVar |= useGenericTypes && (SchemaAssistant.isComplexType(valueSchema)
-                            || Schema.Type.ENUM.equals(valueSchema.getType())
-                            || Schema.Type.FIXED.equals(valueSchema.getType()));
+    boolean shouldDeclareSchemaVar = logicalTypeEnabled(valueSchema) || SchemaAssistant.isComplexType(valueSchema)
+            || Schema.Type.ENUM.equals(valueSchema.getType()) || Schema.Type.FIXED.equals(valueSchema.getType());
 
     /*
      * TODO: In theory, we should only need Record, Enum and Fixed here since only these types require

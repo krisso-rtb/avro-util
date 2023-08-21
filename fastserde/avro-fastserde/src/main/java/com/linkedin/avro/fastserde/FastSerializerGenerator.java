@@ -477,7 +477,7 @@ public class FastSerializerGenerator<T, U extends GenericData> extends FastSerde
 
     switch (primitiveSchema.getType()) {
       case STRING:
-        processString(primitiveSchema, primitiveValueExpression, body);
+        processString(primitiveSchema, writeFunctionArgument, body);
         return;
       case BYTES:
         writeFunction = "writeBytes";
