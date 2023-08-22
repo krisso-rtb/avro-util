@@ -1,9 +1,6 @@
 package com.linkedin.avro.fastserde;
 
 import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelper;
-import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelperCommon;
-import com.linkedin.avroutil1.compatibility.AvroVersion;
-import com.linkedin.avroutil1.compatibility.SchemaNormalization;
 import com.sun.codemodel.JBlock;
 import com.sun.codemodel.JClass;
 import com.sun.codemodel.JCodeModel;
@@ -18,7 +15,6 @@ import com.sun.codemodel.JMod;
 import com.sun.codemodel.JVar;
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
@@ -28,11 +24,8 @@ import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
 
 import org.apache.avro.Conversion;
-import org.apache.avro.Conversions;
 import org.apache.avro.LogicalType;
-import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
-import org.apache.avro.data.TimeConversions;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.specific.SpecificData;
 import org.apache.commons.lang3.StringUtils;
@@ -168,11 +161,7 @@ public abstract class FastSerdeBase<T extends GenericData> {
   }
 
   protected String toLogicalTypeSchemaFieldName(Schema schema) {
-    // "logicalType" is not included in the fingerprint however we need to distinguish these two:
-    // {"type":"long","logicalType":"timestamp-millis"}
-    // {"type":"long","logicalType":"local-timestamp-millis"}
-    byte[] bytes = schema.getLogicalType().getName().getBytes(StandardCharsets.UTF_8);
-    long schemaFingerprint = Utils.getSchemaFingerprint(schema) + SchemaNormalization.fingerprint64(bytes);
+    long schemaFingerprint = Utils.getSchemaFingerprint(schema);
     return ("logicalTypeSchema_" + schemaFingerprint).replace('-', '_');
   }
 

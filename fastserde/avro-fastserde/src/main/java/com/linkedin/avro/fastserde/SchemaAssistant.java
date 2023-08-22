@@ -276,30 +276,6 @@ public class SchemaAssistant<T extends GenericData> {
     return codeModel.ref(Object.class);
   }
 
-//  public JClass logicalTypeOrClassFromSchema(Schema schema) {
-//    if (logicalTypeEnabled(schema)) {
-//      // can't be union here
-//      Class<?> logicalTypeClass = ((Conversion<?>) getConversion(schema.getLogicalType())).getConvertedType();
-//      return codeModel.ref(logicalTypeClass);
-//    }
-//
-//    if (schema.getType() == Schema.Type.UNION && schema.getTypes().stream().anyMatch(this::logicalTypeEnabled)) {
-//      if (schema.getTypes().size() == 1) {
-//        return logicalTypeOrClassFromSchema(schema.getTypes().get(0));
-//      } else if (schema.getTypes().size() == 2) {
-//        if (Schema.Type.NULL.equals(schema.getTypes().get(0).getType())) {
-//          return logicalTypeOrClassFromSchema(schema.getTypes().get(1));
-//        } else if (Schema.Type.NULL.equals(schema.getTypes().get(1).getType())) {
-//          return logicalTypeOrClassFromSchema(schema.getTypes().get(0));
-//        } else {
-//          return codeModel.ref(Object.class);
-//        }
-//      }
-//    }
-//
-//    return classFromSchema(schema);
-//  }
-
   public JClass classFromSchema(Schema schema) {
     return classFromSchema(schema, true, false);
   }

@@ -1,5 +1,9 @@
 package com.linkedin.avro.fastserde;
 
+import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelper;
+import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelperCommon;
+import com.linkedin.avroutil1.compatibility.AvroVersion;
+import com.linkedin.avroutil1.compatibility.AvscGenerationConfig;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -21,11 +25,6 @@ import java.util.stream.Collectors;
 
 import org.apache.avro.Schema;
 import org.apache.commons.lang3.StringUtils;
-
-import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelper;
-import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelperCommon;
-import com.linkedin.avroutil1.compatibility.AvroVersion;
-import com.linkedin.avroutil1.compatibility.AvscGenerationConfig;
 
 
 public class Utils {
@@ -208,9 +207,6 @@ public class Utils {
       }
 
       StringJoiner pathJoiner = new StringJoiner(File.pathSeparator);
-      // TODO temp hack, inferCompileDependencies from Avro class as well
-      pathJoiner.add("/Users/kris/git/rtb-projects/common-domain/target/common-domain-1.0.jar");
-
       if (existingCompileClasspath != null && !existingCompileClasspath.isEmpty()) {
         pathJoiner.add(existingCompileClasspath);
       }

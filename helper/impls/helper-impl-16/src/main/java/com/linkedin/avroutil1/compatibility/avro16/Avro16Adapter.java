@@ -40,11 +40,11 @@ import java.util.Objects;
 import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
-import org.apache.avro.generic.GenericDatumReader;
-import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.io.Avro16BinaryDecoderAccessUtil;
 import org.apache.avro.io.BinaryDecoder;
 import org.apache.avro.io.BinaryEncoder;
+import org.apache.avro.io.DatumReader;
+import org.apache.avro.io.DatumWriter;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.io.Encoder;
@@ -53,7 +53,6 @@ import org.apache.avro.io.JsonDecoder;
 import org.apache.avro.io.JsonEncoder;
 import org.apache.avro.specific.SpecificData;
 import org.apache.avro.specific.SpecificDatumReader;
-import org.apache.avro.specific.SpecificDatumWriter;
 import org.codehaus.jackson.JsonEncoding;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonGenerator;
@@ -228,22 +227,22 @@ public class Avro16Adapter implements AvroAdapter {
   }
 
   @Override
-  public GenericDatumWriter<?> newGenericDatumWriter(Schema writer, GenericData genericData) {
+  public DatumWriter<?> newGenericDatumWriter(Schema writer, GenericData genericData) {
     return new GenericDatumWriterExt<>(writer, genericData);
   }
 
   @Override
-  public GenericDatumReader<?> newGenericDatumReader(Schema writer, Schema reader, GenericData genericData) {
+  public DatumReader<?> newGenericDatumReader(Schema writer, Schema reader, GenericData genericData) {
     return new GenericDatumReaderExt<>(writer, reader, genericData);
   }
 
   @Override
-  public SpecificDatumWriter<?> newSpecificDatumWriter(Schema writer, SpecificData specificData) {
+  public DatumWriter<?> newSpecificDatumWriter(Schema writer, SpecificData specificData) {
     return new SpecificDatumWriterExt<>(writer, specificData);
   }
 
   @Override
-  public SpecificDatumReader<?> newSpecificDatumReader(Schema writer, Schema reader, SpecificData specificData) {
+  public DatumReader<?> newSpecificDatumReader(Schema writer, Schema reader, SpecificData specificData) {
     return new SpecificDatumReader<>(writer, reader, specificData);
   }
 

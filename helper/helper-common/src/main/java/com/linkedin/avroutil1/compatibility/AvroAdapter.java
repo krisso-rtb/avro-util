@@ -23,17 +23,16 @@ import java.util.Set;
 import org.apache.avro.AvroTypeException;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
-import org.apache.avro.generic.GenericDatumReader;
-import org.apache.avro.generic.GenericDatumWriter;
 import org.apache.avro.io.BinaryDecoder;
 import org.apache.avro.io.BinaryEncoder;
+import org.apache.avro.io.DatumReader;
+import org.apache.avro.io.DatumWriter;
 import org.apache.avro.io.Decoder;
 import org.apache.avro.io.Encoder;
 import org.apache.avro.io.JsonDecoder;
 import org.apache.avro.io.JsonEncoder;
 import org.apache.avro.specific.SpecificData;
 import org.apache.avro.specific.SpecificDatumReader;
-import org.apache.avro.specific.SpecificDatumWriter;
 
 
 /**
@@ -79,13 +78,13 @@ public interface AvroAdapter {
 
   <T> SpecificDatumReader<T> newAliasAwareSpecificDatumReader(Schema writer, Class<T> readerClass);
 
-  GenericDatumWriter<?> newGenericDatumWriter(Schema writer, GenericData genericData);
+  DatumWriter<?> newGenericDatumWriter(Schema writer, GenericData genericData);
 
-  GenericDatumReader<?> newGenericDatumReader(Schema writer, Schema reader, GenericData genericData);
+  DatumReader<?> newGenericDatumReader(Schema writer, Schema reader, GenericData genericData);
 
-  SpecificDatumWriter<?> newSpecificDatumWriter(Schema writer, SpecificData specificData);
+  DatumWriter<?> newSpecificDatumWriter(Schema writer, SpecificData specificData);
 
-  SpecificDatumReader<?> newSpecificDatumReader(Schema writer, Schema reader, SpecificData specificData);
+  DatumReader<?> newSpecificDatumReader(Schema writer, Schema reader, SpecificData specificData);
 
   //parsing and Schema-related
 

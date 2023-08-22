@@ -1,22 +1,5 @@
 package com.linkedin.avro.fastserde;
 
-import java.io.File;
-import java.io.IOException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import org.apache.avro.Conversion;
-import org.apache.avro.Conversions;
-import org.apache.avro.Schema;
-import org.apache.avro.generic.GenericData;
-import org.apache.avro.io.Encoder;
-import org.apache.avro.specific.SpecificData;
-import org.apache.avro.util.Utf8;
-import org.apache.commons.lang3.StringUtils;
-
 import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelper;
 import com.sun.codemodel.JBlock;
 import com.sun.codemodel.JClass;
@@ -31,6 +14,21 @@ import com.sun.codemodel.JMethod;
 import com.sun.codemodel.JMod;
 import com.sun.codemodel.JPackage;
 import com.sun.codemodel.JVar;
+import java.io.File;
+import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.apache.avro.Conversion;
+import org.apache.avro.Conversions;
+import org.apache.avro.Schema;
+import org.apache.avro.generic.GenericData;
+import org.apache.avro.io.Encoder;
+import org.apache.avro.specific.SpecificData;
+import org.apache.avro.util.Utf8;
+import org.apache.commons.lang3.StringUtils;
 
 
 public class FastSerializerGenerator<T, U extends GenericData> extends FastSerdeBase<U> {
@@ -44,8 +42,6 @@ public class FastSerializerGenerator<T, U extends GenericData> extends FastSerde
    * Enum schema mapping for Avro-1.4 to record schema id and corresponding schema JVar.
    */
   private final Map<Integer, JVar> enumSchemaVarMap = new HashMap<>();
-
-  private JMethod constructor;
 
   public FastSerializerGenerator(boolean useGenericTypes, Schema schema, File destination, ClassLoader classLoader,
       String compileClassPath, U modelData) {
@@ -66,8 +62,7 @@ public class FastSerializerGenerator<T, U extends GenericData> extends FastSerde
     try {
       generatedClass = classPackage._class(className);
       generatedClass.javadoc().add("Generated at " + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-      this.constructor = generatedClass.constructor(JMod.PUBLIC);
-      injectConversionClasses(this.constructor);
+      injectConversionClasses(generatedClass.constructor(JMod.PUBLIC));
 
       final JMethod serializeMethod = generatedClass.method(JMod.PUBLIC, void.class, "serialize");
       final JVar serializeMethodParam;
@@ -93,6 +88,7 @@ public class FastSerializerGenerator<T, U extends GenericData> extends FastSerde
       serializeMethod.param(codeModel.ref(Encoder.class), ENCODER);
       serializeMethod._throws(codeModel.ref(IOException.class));
 
+      // TODO DO NOT COMMIT
       this.codeModel.build(new File("/Users/kris/dev/temp/avro-fast-serde-codegen"));
 
       final Class<FastSerializer<T>> clazz = compileClass(className, schemaAssistant.getUsedFullyQualifiedClassNameSet());

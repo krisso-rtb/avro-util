@@ -1,5 +1,30 @@
 package com.linkedin.avro.fastserde;
 
+import com.linkedin.avro.api.PrimitiveFloatList;
+import com.linkedin.avro.fastserde.backport.ResolvingGrammarGenerator;
+import com.linkedin.avro.fastserde.backport.Symbol;
+import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelper;
+import com.sun.codemodel.JArray;
+import com.sun.codemodel.JBlock;
+import com.sun.codemodel.JCatchBlock;
+import com.sun.codemodel.JClass;
+import com.sun.codemodel.JClassAlreadyExistsException;
+import com.sun.codemodel.JCodeModel;
+import com.sun.codemodel.JConditional;
+import com.sun.codemodel.JDoLoop;
+import com.sun.codemodel.JExpr;
+import com.sun.codemodel.JExpression;
+import com.sun.codemodel.JFieldRef;
+import com.sun.codemodel.JForLoop;
+import com.sun.codemodel.JInvocation;
+import com.sun.codemodel.JMethod;
+import com.sun.codemodel.JMod;
+import com.sun.codemodel.JPackage;
+import com.sun.codemodel.JStatement;
+import com.sun.codemodel.JTryBlock;
+import com.sun.codemodel.JType;
+import com.sun.codemodel.JVar;
+import com.sun.codemodel.JWhileLoop;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -33,32 +58,6 @@ import org.apache.avro.util.Utf8;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.linkedin.avro.api.PrimitiveFloatList;
-import com.linkedin.avro.fastserde.backport.ResolvingGrammarGenerator;
-import com.linkedin.avro.fastserde.backport.Symbol;
-import com.linkedin.avroutil1.compatibility.AvroCompatibilityHelper;
-import com.sun.codemodel.JArray;
-import com.sun.codemodel.JBlock;
-import com.sun.codemodel.JCatchBlock;
-import com.sun.codemodel.JClass;
-import com.sun.codemodel.JClassAlreadyExistsException;
-import com.sun.codemodel.JCodeModel;
-import com.sun.codemodel.JConditional;
-import com.sun.codemodel.JDoLoop;
-import com.sun.codemodel.JExpr;
-import com.sun.codemodel.JExpression;
-import com.sun.codemodel.JFieldRef;
-import com.sun.codemodel.JForLoop;
-import com.sun.codemodel.JInvocation;
-import com.sun.codemodel.JMethod;
-import com.sun.codemodel.JMod;
-import com.sun.codemodel.JPackage;
-import com.sun.codemodel.JStatement;
-import com.sun.codemodel.JTryBlock;
-import com.sun.codemodel.JType;
-import com.sun.codemodel.JVar;
-import com.sun.codemodel.JWhileLoop;
 
 
 public class FastDeserializerGenerator<T, U extends GenericData> extends FastDeserializerGeneratorBase<T, U> {
@@ -1314,13 +1313,13 @@ public class FastDeserializerGenerator<T, U extends GenericData> extends FastDes
       return null;
     }
 
-    boolean shouldDeclareSchemaVar = logicalTypeEnabled(valueSchema) || SchemaAssistant.isComplexType(valueSchema)
-            || Schema.Type.ENUM.equals(valueSchema.getType()) || Schema.Type.FIXED.equals(valueSchema.getType());
-
     /*
      * TODO: In theory, we should only need Record, Enum and Fixed here since only these types require
      * schema for the corresponding object initialization in Generic mode.
      */
+    boolean shouldDeclareSchemaVar = logicalTypeEnabled(valueSchema) || SchemaAssistant.isComplexType(valueSchema)
+            || Schema.Type.ENUM.equals(valueSchema.getType()) || Schema.Type.FIXED.equals(valueSchema.getType());
+
     if (shouldDeclareSchemaVar) {
       int schemaId = Utils.getSchemaFingerprint(valueSchema);
       JVar schemaVar = schemaVarMap.get(schemaId);

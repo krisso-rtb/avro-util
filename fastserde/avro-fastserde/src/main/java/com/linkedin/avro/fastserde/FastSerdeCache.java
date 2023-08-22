@@ -31,7 +31,6 @@ import org.apache.avro.io.Decoder;
 import org.apache.avro.io.Encoder;
 import org.apache.avro.specific.SpecificData;
 import org.apache.avro.specific.SpecificDatumReader;
-import org.apache.avro.specific.SpecificDatumWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -630,7 +629,7 @@ public final class FastSerdeCache {
   }
 
   public static class FastSerializerWithAvroSpecificImpl<V> implements FastSerializer<V> {
-    private final SpecificDatumWriter<V> datumWriter;
+    private final DatumWriter<V> datumWriter;
 
     public FastSerializerWithAvroSpecificImpl(Schema schema, SpecificData modelData) {
       this.datumWriter = AvroCompatibilityHelper.newSpecificDatumWriter(schema,
